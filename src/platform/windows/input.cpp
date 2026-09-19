@@ -533,14 +533,10 @@ namespace platf {
    * @param raw Global Windows input context.
    * @return True when Virtual HID Driver gamepads are available and selected.
    */
-  bool should_use_virtualhid_gamepads(const input_raw_t &raw) {
-    if (!raw.virtualhid.runtime) {
-      return false;
-    }
-
-    const auto &capabilities = raw.virtualhid.runtime->capabilities();
-    const auto licensed = !capabilities.requires_installed_driver || lvh::get_license_status().license.licensed();
-    return virtualhid::should_use_gamepad_runtime(capabilities, config::input.gamepad_driver, licensed);
+  bool should_use_virtualhid_gamepads([[maybe_unused]] const input_raw_t &raw) {
+    // OpenShine doesn't use proprietary licensed driver in favor of open source
+    // options.
+    return false;
   }
 
   /**
@@ -561,12 +557,8 @@ namespace platf {
   input_t input() {
     input_t result {new input_raw_t {}};
 
-    if (auto &raw = *result; config::input.controller && !should_use_virtualhid_gamepads(raw) && virtualhid::should_try_vigembus_fallback(config::input.gamepad, false, config::input.gamepad_driver)) {
-      if (config::input.gamepad_driver == config::GAMEPAD_DRIVER_VIGEMBUS) {
-        BOOST_LOG(info) << "ViGEmBus is selected as the only virtual gamepad driver"sv;
-      } else if (raw.virtualhid.runtime && raw.virtualhid.runtime->capabilities().supports_gamepad) {
-        BOOST_LOG(info) << "Virtual HID Driver license is not valid; using the ViGEmBus gamepad fallback"sv;
-      }
+    if (auto &raw = *result; config::input.controller ) {
+      BOOST_LOG(info) << "ViGEmBus is selected as the only virtual gamepad driver"sv;
       auto vigem = std::make_unique<vigem_t>();
       if (!vigem->init()) {
         raw.vigem = std::move(vigem);
@@ -603,19 +595,6 @@ namespace platf {
    * @return True when the allocation may continue through ViGEmBus.
    */
   bool should_allocate_vigembus_gamepad(const bool virtualhid_selected) {
-    if (!virtualhid::should_try_vigembus_fallback(config::input.gamepad, virtualhid_selected, config::input.gamepad_driver)) {
-      if (config::input.gamepad_driver == config::GAMEPAD_DRIVER_VIRTUALHID && !virtualhid_selected) {
-        BOOST_LOG(warning) << "Virtual HID Driver is selected but is unavailable or unlicensed; ViGEmBus fallback is disabled by configuration"sv;
-      } else {
-        BOOST_LOG(warning) << "libvirtualhid could not create the requested gamepad profile, and ViGEm fallback cannot emulate "sv << config::input.gamepad;
-      }
-      return false;
-    }
-
-    if (!virtualhid_selected && !virtualhid::should_try_vigembus_fallback(config::input.gamepad, true, config::input.gamepad_driver)) {
-      BOOST_LOG(warning) << "Configured gamepad profile '"sv << config::input.gamepad
-                         << "' is unavailable; using ViGEmBus automatic selection because Virtual HID Driver is not usable"sv;
-    }
     return true;
   }
 
@@ -1268,38 +1247,8 @@ namespace platf {
 
   std::vector<supported_gamepad_t> &supported_gamepads(input_t *input) {
     static std::vector<supported_gamepad_t> gps;
-    if (!input || !input->get()) {
-      gps = virtualhid::static_supported_gamepads();
-      return gps;
-    }
-
-    const auto raw = (input_raw_t *) input->get();
-    if (config::input.gamepad_driver == config::GAMEPAD_DRIVER_VIGEMBUS) {
-      gps = vigembus_supported_gamepads(raw->vigem != nullptr);
-      return gps;
-    }
-
-    if (!raw->virtualhid.runtime) {
-      if (config::input.gamepad_driver == config::GAMEPAD_DRIVER_VIRTUALHID) {
-        gps = virtualhid::static_supported_gamepads();
-        for (auto &gamepad : gps) {
-          gamepad.is_enabled = false;
-          gamepad.reason_disabled = "gamepads.virtualhid-not-available";
-        }
-      } else {
-        gps = vigembus_supported_gamepads(raw->vigem != nullptr);
-      }
-      return gps;
-    }
-
-    const auto &capabilities = raw->virtualhid.runtime->capabilities();
-    const auto licensed = !capabilities.requires_installed_driver || lvh::get_license_status().license.licensed();
-    if (const auto use_virtualhid = virtualhid::should_use_gamepad_runtime(capabilities, config::input.gamepad_driver, licensed); !use_virtualhid && config::input.gamepad_driver != config::GAMEPAD_DRIVER_VIRTUALHID) {
-      gps = vigembus_supported_gamepads(raw->vigem != nullptr);
-      return gps;
-    }
-
-    gps = virtualhid::supported_gamepads(raw->virtualhid.runtime.get(), raw->vigem != nullptr, licensed);
+    const bool available = input && input->get() && ((input_raw_t *) input->get())->vigem != nullptr;
+    gps = vigembus_supported_gamepads(available);
     return gps;
   }
 
