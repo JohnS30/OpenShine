@@ -8,12 +8,6 @@
 #include <string>
 #include <string_view>
 
-#ifdef _WIN32
-namespace lvh {
-  struct LicenseStatus;
-}
-#endif
-
 /**
  * @brief Handles the system tray icon and notification system.
  */
@@ -41,20 +35,6 @@ namespace system_tray {
    * @param item The tray menu item.
    */
   void tray_donate_paypal_cb([[maybe_unused]] struct tray_menu *item);
-
-#ifdef _WIN32
-  /**
-   * @brief Callback for opening Virtual HID Driver license settings in the Web UI.
-   * @param item The tray menu item.
-   */
-  void tray_virtualhid_license_cb([[maybe_unused]] struct tray_menu *item);
-
-  /**
-   * @brief Callback for opening the latest Virtual HID Driver release.
-   * @param item The tray menu item.
-   */
-  void tray_virtualhid_download_cb([[maybe_unused]] struct tray_menu *item);
-#endif
 
   /**
    * @brief Callback for resetting display device configuration.
@@ -117,40 +97,21 @@ namespace system_tray {
 
 #ifdef _WIN32
   /**
-   * @brief Update the Virtual HID Driver license submenu and optional notification.
-   *
-   * @param license Latest machine license details.
-   * @param notify_if_unlicensed Whether to notify the user when the machine is not activated and ViGEmBus is not exclusively selected.
+   * @brief Prepare the system tray Virtual HID license state (no-op in OpenShine).
    */
-  void update_tray_virtualhid_license(const lvh::LicenseStatus &license, bool notify_if_unlicensed);
-
+  inline void prepare_tray_virtualhid_license() {}
   /**
-   * @brief Query the Virtual HID Driver license and prepare the startup tray state.
+   * @brief Prepare the system tray Virtual HID driver state (no-op in OpenShine).
    */
-  void prepare_tray_virtualhid_license();
-
+  inline void prepare_tray_virtualhid_driver() {}
   /**
-   * @brief Show an update notification for an unsupported Virtual HID Driver.
-   *
-   * Existing notifications are preserved while the driver choice is unset, when ViGEmBus is exclusively selected,
-   * or when the driver is absent or supported.
-   *
-   * @param installed Whether the driver is installed.
-   * @param version Installed driver version.
-   * @param version_compatible Whether Sunshine supports the installed version.
-   * @param supported_versions User-visible supported version range.
+   * @brief Update the system tray Virtual HID license state (no-op in OpenShine).
+   * @tparam T License status type.
+   * @param license The license status object.
+   * @param notify_if_unlicensed Whether to notify if unlicensed.
    */
-  void update_tray_virtualhid_driver(
-    bool installed,
-    std::string_view version,
-    bool version_compatible,
-    std::string_view supported_versions
-  );
-
-  /**
-   * @brief Query the Virtual HID Driver version and prepare its startup notification.
-   */
-  void prepare_tray_virtualhid_driver();
+  template <typename T>
+  inline void update_tray_virtualhid_license([[maybe_unused]] const T &license, [[maybe_unused]] bool notify_if_unlicensed) {}
 #endif
 
   /**
