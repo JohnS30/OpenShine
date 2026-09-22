@@ -82,28 +82,10 @@ namespace confighttp {
   using https_handler_t = std::function<void(resp_https_t, req_https_t)>;
 
   namespace {
-    using license_status_provider_t = std::function<lvh::LicenseResult()>;  ///< Provider for the current libvirtualhid license status.
+    //using license_status_provider_t = std::function<lvh::LicenseResult()>;  ///< Provider for the current libvirtualhid license status.
 #if defined(linux) || defined(__FreeBSD__) || defined(SUNSHINE_TESTS)
     using portal_token_path_provider_t = std::function<fs::path()>;  ///< Provider for the XDG Portal token path.
 #endif
-
-    /**
-     * @brief Return the current libvirtualhid license status provider.
-     *
-     * Unit-test builds expose a mutable provider so the HTTP fixture can avoid
-     * contacting an installed Windows broker. Production builds keep the
-     * provider const and always call libvirtualhid directly.
-     *
-     * @return License status provider for the current build.
-     */
-    auto &virtual_input_license_status_provider() {
-#ifdef SUNSHINE_TESTS
-      static license_status_provider_t status_provider = lvh::get_license_status;
-#else
-      static const license_status_provider_t status_provider = lvh::get_license_status;
-#endif
-      return status_provider;
-    }
 
 #if defined(linux) || defined(__FreeBSD__) || defined(SUNSHINE_TESTS)
     /**
@@ -165,14 +147,6 @@ namespace confighttp {
 #ifdef SUNSHINE_TESTS
   void set_virtual_input_license_status_provider_for_testing(virtual_input_license_status_provider_t status_provider) {
     virtual_input_license_status_provider() = std::move(status_provider);
-  }
-
-  void reset_virtual_input_license_status_provider_for_testing() {
-    virtual_input_license_status_provider() = lvh::get_license_status;
-  }
-
-  void set_portal_token_path_provider_for_testing(confighttp::portal_token_path_provider_t path_provider) {
-    portal_token_path_provider() = std::move(path_provider);
   }
 
   void reset_portal_token_path_provider_for_testing() {
@@ -332,22 +306,21 @@ namespace confighttp {
     }
   }
 
-  nlohmann::json build_virtualhid_license_status(const lvh::LicenseResult &result) {
-    const auto &license = result.license;
+  nlohmann::json build_virtualhid_license_status() {
     nlohmann::json output_tree;
-    output_tree["operation_ok"] = result.status.ok();
-    output_tree["service_available"] = license.service_available;
-    output_tree["state"] = virtualhid_license_state_name(license.state);
-    output_tree["licensed"] = license.licensed();
-    output_tree["active_devices"] = license.active_devices;
-    output_tree["activation_limit"] = license.activation_limit;
-    output_tree["activation_usage"] = license.activation_usage;
-    output_tree["plan_name"] = license.plan_name;
-    output_tree["customer_email"] = license.customer_email;
-    output_tree["message"] = license.message;
-    output_tree["purchase_url"] = license.purchase_url;
-    output_tree["manage_account_url"] = license.manage_account_url;
-    output_tree["error"] = result.status.ok() ? "" : result.status.message();
+    output_tree["operation_ok"] = true;
+    output_tree["service_available"] = true;
+    output_tree["state"] = "licensed";
+    output_tree["licensed"] = true;
+    output_tree["active_devices"] = 0;
+    output_tree["activation_limit"] = 1;
+    output_tree["activation_usage"] = 1;
+    output_tree["plan_name"] = "OpenShine Edition";
+    output_tree["customer_email"] = "unknown@dummyemail.com";
+    output_tree["message"] = "OpenShine: No license required for this software";
+    output_tree["purchase_url"] = "";
+    output_tree["manage_account_url"] = "";
+    output_tree["error"] = "";
     return output_tree;
   }
 
@@ -364,7 +337,7 @@ namespace confighttp {
       }
 
       print_req(request);
-      send_response(response, build_virtualhid_license_status(virtual_input_license_status_provider()()));
+      send_response(response, build_virtualhid_license_status());
     }
   }  // namespace
 
@@ -2083,47 +2056,9 @@ namespace confighttp {
     }
 
     print_req(request);
-    try {
-      std::stringstream content;
-      content << request->content.rdbuf();
-      auto input_tree = nlohmann::json::parse(content);
-      const auto action = input_tree.value("action", "");
-
-      lvh::LicenseResult result;
-      if (action == "activate") {
-        auto license_key = input_tree.value("license_key", "");
-        input_tree["license_key"] = "";
-        if (license_key.empty()) {
-          bad_request(response, request, "License key is required");
-          return;
-        }
-
-        const scoped_sensitive_string_clear_t clear_license_key {license_key};
-        result = lvh::activate_license(license_key);
-      } else if (action == "validate") {
-        result = lvh::validate_license();
-      } else if (action == "deactivate") {
-        result = lvh::deactivate_license();
-      } else {
-        bad_request(response, request, "Unknown license action");
-        return;
-      }
-
-#ifdef _WIN32
-      config::select_all_gamepad_drivers_if_licensed(result.license.licensed());
-#endif
-#if defined(_WIN32) && defined(SUNSHINE_TRAY) && SUNSHINE_TRAY >= 1
-      system_tray::update_tray_virtualhid_license(result.license, false);
-#endif
-#ifdef _WIN32
-      if (result.status.ok()) {
-        input::refresh_virtual_input();
-      }
-#endif
-      send_response(response, build_virtualhid_license_status(result));
-    } catch (const nlohmann::json::exception &) {
-      bad_request(response, request, "Invalid license request");
-    }
+    
+    // OpenShine: Respond with success immediately without contacting libvirtualhid
+    send_response(response, build_virtualhid_license_status());
   }
 
   /**
